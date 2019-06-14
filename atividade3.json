@@ -11,7 +11,7 @@
         "FaixaIPSubrede": {
             "Description": "Faixa IP utilizada na sub rede publica",
             "Type": "String",
-            "Default": "10.0.10.0/24",
+            "Default": "10.0.10.0/24"
         },
 
 
@@ -153,6 +153,23 @@
                    
             }
         },
+
+        "ServidorBD": {
+			"Type": "AWS::EC2::Instance",
+			"Properties": {
+				"ImageId": {"Ref": "ImageId"},
+				"InstanceType": {"Ref": "InstanceType"},
+				"KeyName": {"Ref": "KeyName"},
+				"SecurityGroupIds": [{"Ref": "GrupoDeSegurancaBancoDeDados"}],
+                "SubnetId": {"Ref": "SubRede"},
+                "UserData": {"Fn::Base64": {"Fn::Join": ["", [
+                    "#!/bin/bash -ex \n",
+                ]]}}
+          
+                
+			}
+		},
+
 
         "ServidorWeb": {
 			"Type": "AWS::EC2::Instance",
