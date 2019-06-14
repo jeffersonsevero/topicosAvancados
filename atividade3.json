@@ -1,0 +1,184 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Atividade 3 topicos",
+    "Parameters": {
+        "FaixaIPVPC": {
+            "Description": "Faixa IP utilizada no VPC",
+            "Type": "String",
+            "Default": "10.0.0.0/16",
+            "AllowedValues": [" 10.0.0.0/16"]
+        },
+        "FaixaIPSubrede": {
+            "Description": "Faixa IP utilizada na sub rede publica",
+            "Type": "String",
+            "Default": "10.0.10.0/24",
+        },
+
+
+        "ZonaSubRede": {
+            "Description": "Zona de sub rede",
+            "Type": "Number",
+            "Default": 1
+        },
+
+        "keyName": {
+            "Description": "Nome do par de chaves",
+            "Type": "AWS::EC2::keyPair::KeyName",
+            "Default": "mykey"
+
+        },
+
+        "InstanceType": {
+            "Description": "Tipo de instancia",
+            "Type": "String",
+            "Default": "t2.micro",
+            "AllowedValues": ["t2.micro", "t2.small", "t2.medium"]
+        },
+
+        "ImageId": {
+            "Description": "Identificador da imagem",
+            "Type": "String",
+            "Default": "ami-024a64a6685d05041"
+        }
+
+     
+    },
+
+
+
+    "Resources": {
+        "NovoVPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {"Ref": "FaixaIPVPC"},
+                "Tags": [{"Key": "Name", "Value": "NovoVPC"}]
+            }
+        },
+
+        "SubRede": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {"Ref": "NovoVPC"},
+                "CidrBlock": {"Ref": "FaixaIPSubrede"},
+                "Fn::Select": [{"Ref": "ZonaSubRede" }, {"Fn::GetAZs": ""}]
+            }
+        },
+
+
+        "RoteadorInternet": {
+            "Type": "AWS::EC2::InternetGateway"
+        },
+
+        "LigacaoRoteadorVPC": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties":{
+                "InternetGatewayId": {"Ref": "RoteadorInternet"},
+                "VpcId": {"Ref": "NovoVPC"}
+            }
+        },
+
+        "TabelaRoteamento": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {"Ref": "NovoVPC"}
+            }
+        },
+
+        "EntradaTabelaRoteamento": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "GatewayId": {"Ref": "RoteadorInternet"},
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "RouteTableId": {"Ref": "TabelaRoteamento"}
+            }
+        },
+
+        "LigacaoTabelaSubRede": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {"Ref": "SubRede"},
+                "RouteTableId": {"Ref": "TabelaRoteamento"}
+            }
+        },
+
+        "GrupoDeSegurancaServidorSSH": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Grupo de Seguranca para um ServidorSSH",
+				"VpcId": {"Ref":"NovoVPC"},
+				"SecurityGroupIngress": [{
+				    "CidrIp": "0.0.0.0/0",
+                    "FromPort": 22,
+                    "IpProtocol": "tcp",
+                    "ToPort": 22
+			}]}
+        },
+        
+        "GrupoDeSegurancaServidorWeb": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Grupo de Seguranca para um Servidor Web",
+				"VpcId": {"Ref": "NovoVPC"},
+				"SecurityGroupIngress": [{
+					"CidrIp": "0.0.0.0/0",
+					"FromPort": 80,
+					"IpProtocol": "tcp",
+					"ToPort": 80
+				}, {
+   				"SourceSecurityGroupId": {"Ref": "GrupoDeSegurancaServidorSSH"},
+					"FromPort": 22,
+					"IpProtocol": "tcp",
+					"ToPort": 22
+            }]
+			}
+        },
+        
+        "GrupoDeSegurancaBancoDeDados": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Grupo de seguranca servidor de banco de dados",
+                "VpcId": {"Ref": "NovoVPC"},
+                "SecurityGroupIngress": [{
+                    "SourceSecurityGroupId": {"Ref": "GrupoDeSegurancaServidorWeb"},
+					"FromPort": 80,
+					"IpProtocol": "tcp",
+                    "ToPort": 3306
+                },{
+                    "SourceSecurityGroupId": {"Ref": "GrupoDeSegurancaServidorSSH"},
+					"FromPort": 22,
+					"IpProtocol": "tcp",
+                    "ToPort": 22
+                }]
+			
+                   
+            }
+        },
+
+        "ServidorWeb": {
+			"Type": "AWS::EC2::Instance",
+			"Properties": {
+				"ImageId": {"Ref":"ImageId"},
+				"InstanceType": {"Ref": "InstanceType"},
+                "KeyName": {"Ref": "KeyName"},
+                "NetworkInterfaces": [{
+                    "AssociatePublicIpAddress": "true",
+                    "DeleteOnTermination": "true",
+                    "SubnetId": {"Ref": "SubRede"},
+                    "DeviceIndex": 0,
+                    "GroupSet": [{"Ref": "GrupoDeSegurancaServidorWeb"}]
+                }],
+				
+            "UserData": {"Fn::Base64": { "Fn::Join": ["", [
+               "#!/bin/bash -ex \n",
+        
+            ]]}}
+			}
+		}
+
+        
+
+
+
+    }
+
+}
