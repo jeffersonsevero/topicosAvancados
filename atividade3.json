@@ -21,9 +21,9 @@
             "Default": 1
         },
 
-        "keyName": {
+        "KeyName": {
             "Description": "Nome do par de chaves",
-            "Type": "AWS::EC2::keyPair::KeyName",
+			"Type": "AWS::EC2::KeyPair::KeyName",
             "Default": "mykey"
 
         },
@@ -60,7 +60,10 @@
             "Properties": {
                 "VpcId": {"Ref": "NovoVPC"},
                 "CidrBlock": {"Ref": "FaixaIPSubrede"},
-                "Fn::Select": [{"Ref": "ZonaSubRede" }, {"Fn::GetAZs": ""}]
+                "AvailabilityZone":{
+                    "Fn::Select": [{"Ref": "ZonaSubRede" }, {"Fn::GetAZs": ""}]
+                }
+                
             }
         },
 
@@ -140,7 +143,7 @@
                 "VpcId": {"Ref": "NovoVPC"},
                 "SecurityGroupIngress": [{
                     "SourceSecurityGroupId": {"Ref": "GrupoDeSegurancaServidorWeb"},
-					"FromPort": 80,
+					"FromPort": 3306,
 					"IpProtocol": "tcp",
                     "ToPort": 3306
                 },{
@@ -155,47 +158,85 @@
         },
 
         "ServidorBD": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+               "ImageId": {"Ref":"ImageId"},
+               "InstanceType": {"Ref": "InstanceType"},
+               "KeyName": {"Ref": "KeyName"},
+               "NetworkInterfaces": [{
+                  "AssociatePublicIpAddress": "true",
+                  "DeleteOnTermination": "true",
+                  "SubnetId": {"Ref": "SubRede"},
+                  "DeviceIndex": "0",
+                  "GroupSet": [{"Ref": "GrupoDeSegurancaBancoDeDados"}]
+               }],
+               "UserData" : {"Fn::Base64": { "Fn::Join": ["", [
+                                        "#!/bin/bash -ex \n",
+                                        "apt-get update \n",
+                                        "sudo apt -y install mysql-server \n",
+                                        "sudo mysql <<EOF \n",
+                                        "CREATE DATABASE wordpress; \n",
+                                        "CREATE USER 'wordpress'@'%' IDENTIFIED BY 'wordpress'; \n",
+                                        "GRANT ALL ON wordpress.* TO 'wordpress'@'%';\n",
+                                        "FLUSH PRIVILEGES; \n",
+                                        "\nEOF\n\n",
+                                        "sudo sed -i 's/bind-address/#bind-address/g' /etc/mysql/mysql.conf.d/mysqld.cnf \n",
+                                        "sudo sed -i 's/skip-external-locking/#skip-external-locking/g' /etc/mysql/mysql.conf.d/mysqld.cnf \n",
+                                        "sudo systemctl restart mysql\n"
+                                    ]]}}
+            }
+         },
+
+        "ServidorSSH": {
 			"Type": "AWS::EC2::Instance",
 			"Properties": {
 				"ImageId": {"Ref": "ImageId"},
 				"InstanceType": {"Ref": "InstanceType"},
-				"KeyName": {"Ref": "KeyName"},
-				"SecurityGroupIds": [{"Ref": "GrupoDeSegurancaBancoDeDados"}],
-                "SubnetId": {"Ref": "SubRede"},
+                "KeyName": {"Ref": "KeyName"},
+                "NetworkInterfaces": [{
+					"AssociatePublicIpAddress": "true",
+					"DeleteOnTermination": "true",
+					"SubnetId": {"Ref": "SubRede"},
+					"DeviceIndex": "0",
+					"GroupSet": [{"Ref": "GrupoDeSegurancaServidorSSH"}]
+                }]
+                
+			}
+        },
+        
+        "ServidorWeb": {
+			"Type": "AWS::EC2::Instance",
+			"Properties": {
+				"ImageId": {"Ref": "ImageId"},
+				"InstanceType": {"Ref": "InstanceType"},
+                "KeyName": {"Ref": "KeyName"},
+                "NetworkInterfaces": [{
+					"AssociatePublicIpAddress": "true",
+					"DeleteOnTermination": "true",
+					"SubnetId": {"Ref": "SubRede"},
+					"DeviceIndex": "0",
+					"GroupSet": [{"Ref": "GrupoDeSegurancaServidorWeb"}]
+                }],
                 "UserData": {"Fn::Base64": {"Fn::Join": ["", [
                     "#!/bin/bash -ex \n",
+                    "export IPBD=", {"Fn::GetAtt": ["ServidorBD", "PrivateIp"]}, "\n",
+                    "wget https://raw.githubusercontent.com/jeffersonsevero/topicosAvancados/master/instalacaoWordpressSemBD.sh \n",
+                    "chmod +x instalacaoWordpressSemBD.sh \n",
+                    "./instalacaoWordpressSemBD.sh \n"
                 ]]}}
           
                 
 			}
-		},
-
-
-        "ServidorWeb": {
-			"Type": "AWS::EC2::Instance",
-			"Properties": {
-				"ImageId": {"Ref":"ImageId"},
-				"InstanceType": {"Ref": "InstanceType"},
-                "KeyName": {"Ref": "KeyName"},
-                "NetworkInterfaces": [{
-                    "AssociatePublicIpAddress": "true",
-                    "DeleteOnTermination": "true",
-                    "SubnetId": {"Ref": "SubRede"},
-                    "DeviceIndex": 0,
-                    "GroupSet": [{"Ref": "GrupoDeSegurancaServidorWeb"}]
-                }],
-				
-            "UserData": {"Fn::Base64": { "Fn::Join": ["", [
-               "#!/bin/bash -ex \n",
-        
-            ]]}}
-			}
 		}
 
-        
-
-
-
+    },
+    "Outputs":{
+        "IPServidorWeb": {
+            "Value": {"Fn::GetAtt": ["ServidorWeb", "PublicIp"]}
+        },
+        "IPServidorSSH": {
+            "Value": {"Fn::GetAtt": ["ServidorSSH", "PublicIp"]}
+        }
     }
 
 }
