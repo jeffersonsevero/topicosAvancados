@@ -3,8 +3,8 @@
 #Esse script necessecita do IP do banco de dados
 #O mesmo deve ser exportado com no IPBD
 ip_banco="${IPBD}"
-usuario="wordpress"
-senha="wordpress"
+usuario="${USER}"
+senha="${PASSWORD}"
 
 #INSTALA O O QUE É NECESSÁRIO
 sudo apt -y update
